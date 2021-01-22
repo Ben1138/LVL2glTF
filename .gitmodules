@@ -1,3 +1,6 @@
 [submodule "ThirdParty/tinygltf"]
 	path = ThirdParty/tinygltf
 	url = https://github.com/syoyo/tinygltf
+[submodule "ThirdParty/fmt"]
+	path = ThirdParty/fmt
+	url = https://github.com/fmtlib/fmt

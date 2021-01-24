@@ -37,15 +37,11 @@ using LibSWBF2::Wrappers::Material;
 
 bool grabLibSWBF2Logs()
 {
-    bool sthLogged = false;
     LoggerEntry logEntry;
     while (Logger::GetNextLog(logEntry))
     {
-        std::cout << '\n';
         LOG(logEntry.ToString().Buffer());
-        sthLogged = true;
     }
-    return sthLogged;
 }
 
 void convertColor(const Color4u8& swbfColor, std::vector<double>& outColor)
@@ -512,6 +508,7 @@ int main(int argc, char** argv)
                     gltfMat.pbrMetallicRoughness.metallicFactor = 0.0f;
                     
                     // TODO: textures
+                    
 
                     tinygltf::Primitive& prim = mesh.primitives.emplace_back();
                     prim.attributes =
@@ -525,11 +522,8 @@ int main(int argc, char** argv)
                     prim.mode = gltfTopology(segm.GetTopology());
                     prim.material = (int)gltf.materials.size() - 1;
                 }
-                //break;
             }
-            //break;
         }
-        //break;
     }
 
     con->FreeAll();

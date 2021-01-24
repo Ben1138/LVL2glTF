@@ -208,19 +208,33 @@ int gltfTopology(ETopology topology)
     }
 }
 
+void printMenu(const std::vector<std::string>& worldNames, std::vector<bool>& chosenWorlds)
+{
+    LOG("Choose which Layers to convert:");
+    for (size_t i = 0; i < worldNames.size(); ++i)
+    {
+        LOG("  {0:2d}) [{1}] {2}", i + 1, chosenWorlds[i] ? 'X' : ' ', worldNames[i]);
+    }
+    LOG("\n  0) Convert choosen layers");
+}
+
 int main(int argc, char** argv)
 {
-    CLI::App app{ "LVL to glTF converter" };
+    CLI::App app{ "LVL to glTF 2.0 converter" };
     std::string fileIn = "";
     std::string fileCom = "";
     std::string fileOut = "";
-    app.add_option("-i,--inlvl", fileIn, "The world LVL file to convert");
-    app.add_option("-o,--outglb", fileOut, "(optional) output file");
+    bool bGLTF = false;
+    app.add_option("-i,--inlvl", fileIn, "Path to the world LVL file to convert");
+    app.add_option("-c,--incommon", fileCom, "(optional) Path to ingame.lvl (needed for command posts, turrets, health droids, etc.");
+    app.add_option("-o,--outglb", fileOut, "(optional) output file. If not specified, the output file path will match the input file path, with just the file extension changed.");
+    app.add_option("--gltf", bGLTF, "The output file will be a .gltf file (text format). Default is .glb (binary format). Note that for the .gltf format, textures won't get exported!");
     CLI11_PARSE(app, argc, argv);
 
     if (fileIn.empty())
     {
         LOG("No input LVL file specified!");
+        LOG(app.help());
         return 1;
     }
 
@@ -233,22 +247,30 @@ int main(int argc, char** argv)
     if (fileOut.empty())
     {
         fs::path p = fileIn;
-        p.replace_extension(".glb");
+        p.replace_extension(bGLTF ? ".gltf" : ".glb");
         fileOut = p.u8string();
     }
     
-    Logger::SetLogfileLevel(ELogType::Warning);
+    Logger::SetLogfileLevel(ELogType::Error);
 
     Container* con = Container::Create();
-    SWBF2Handle lvlHandle = con->AddLevel(fileIn.c_str());
+    con->AddLevel(fileIn.c_str());
+    if (!fileCom.empty())
+    {
+        if (fs::exists(fileCom))
+        {
+            con->AddLevel(fileCom.c_str());
+        }
+        else
+        {
+            LOG("Could not find '{0}'!", fileCom.c_str());
+        }
+    }
     con->StartLoading();
-
-    std::vector<char> null = { 0 };
 
     std::string filename = fs::path(fileIn).filename().u8string();
     fmt::memory_buffer updateLine;
     fmt::format_to(updateLine, "Start Loading '{0}'...", filename.c_str());
-    updateLine.append(null);
     std::cout << updateLine.data();
 
     while (!con->IsDone())
@@ -261,7 +283,6 @@ int main(int argc, char** argv)
         {
             updateLine.clear();
             fmt::format_to(updateLine, "Loading '{0}'... {1}%", filename.c_str(), (int)(con->GetOverallProgress() * 100.0f));
-            updateLine.append(null);
             std::cout << '\r' << updateLine.data();
         }
     }
@@ -280,6 +301,39 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    std::vector<std::string> worldNames;
+    std::vector<bool> chosenWorlds;
+    for (uint32_t i = 0; i < worlds.Size(); ++i)
+    {
+        worldNames.emplace_back(fmt::format("{0:25s} [{1} objects]", worlds[i].GetName().Buffer(), worlds[i].GetInstances().Size()));
+        chosenWorlds.emplace_back(false);
+    }
+
+    int option = -1;
+    int numLayers = 0;
+    do
+    {
+        printMenu(worldNames, chosenWorlds);
+        std::cout << "\nChoose: ";
+        std::cin >> option;
+
+        if (option < 0 || option >= worldNames.size())
+        {
+            LOG("{0} is not a valid option!");
+            option = -1;
+        }
+        else if (option != 0)
+        {
+            chosenWorlds[option - 1] = !chosenWorlds[option - 1];
+            numLayers += chosenWorlds[option - 1] ? 1 : -1;
+        }
+        if (numLayers == 0)
+        {
+            LOG("No layers choosen for conversion! Choose at least one layer!");
+        }
+    }
+    while (option != 0 || numLayers == 0);
+
     tinygltf::Model gltf;
     gltf.asset.copyright = "https://github.com/Ben1138/LVL2glTF";
     gltf.asset.generator = "LVL2glTF converter";
@@ -290,6 +344,9 @@ int main(int argc, char** argv)
 
     for (uint32_t i = 0; i < worlds.Size(); ++i)
     {
+        // skip unwanted layers
+        if (!chosenWorlds[i]) continue;
+
         const World& wld = worlds[i];
         String wldName = wld.GetName();
         const Terrain* terr = wld.GetTerrain();
@@ -482,7 +539,7 @@ int main(int argc, char** argv)
 
     LOG("Writing output file: {0}...", fileOut.c_str());
     tinygltf::TinyGLTF writer;
-    writer.WriteGltfSceneToFile(&gltf, fileOut, false, true, true, true);
+    writer.WriteGltfSceneToFile(&gltf, fileOut, false, true, true, !bGLTF);
     LOG("Done!");
 
     return 0;

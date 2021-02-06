@@ -37,11 +37,14 @@ using LibSWBF2::Wrappers::Material;
 
 bool grabLibSWBF2Logs()
 {
+    bool bLogged = false;
     LoggerEntry logEntry;
     while (Logger::GetNextLog(logEntry))
     {
         LOG(logEntry.ToString().Buffer());
+        bLogged = true;
     }
+    return bLogged;
 }
 
 void convertColor(const Color4u8& swbfColor, std::vector<double>& outColor)
@@ -211,7 +214,9 @@ void printMenu(const std::vector<std::string>& worldNames, std::vector<bool>& ch
     {
         LOG("  {0:2d}) [{1}] {2}", i + 1, chosenWorlds[i] ? 'X' : ' ', worldNames[i]);
     }
-    LOG("\n  0) Convert choosen layers");
+    LOG("\n  {0:2d}) Select all", worldNames.size() + 1);
+    LOG("  {0:2d}) Remove all", worldNames.size() + 2);
+    LOG("   0) Start conversion");
 }
 
 int main(int argc, char** argv)
@@ -265,9 +270,10 @@ int main(int argc, char** argv)
     con->StartLoading();
 
     std::string filename = fs::path(fileIn).filename().u8string();
-    fmt::memory_buffer updateLine;
+    char updateLine[80] = {' '};
     fmt::format_to(updateLine, "Start Loading '{0}'...", filename.c_str());
-    std::cout << updateLine.data();
+    updateLine[79] = 0;
+    std::cout << updateLine;
 
     while (!con->IsDone())
     {
@@ -277,11 +283,13 @@ int main(int argc, char** argv)
         }
         else
         {
-            updateLine.clear();
+            std::memset(updateLine, ' ', 80);
             fmt::format_to(updateLine, "Loading '{0}'... {1}%", filename.c_str(), (int)(con->GetOverallProgress() * 100.0f));
-            std::cout << '\r' << updateLine.data();
+            updateLine[79] = 0;
+            std::cout << '\r' << updateLine;
         }
     }
+    LOG("");
 
     Level* lvl = con->TryGetWorldLevel();
     if (lvl == nullptr)
@@ -312,16 +320,41 @@ int main(int argc, char** argv)
         printMenu(worldNames, chosenWorlds);
         std::cout << "\nChoose: ";
         std::cin >> option;
-
-        if (option < 0 || option >= worldNames.size())
+        if (std::cin.fail())
         {
-            LOG("{0} is not a valid option!");
+            LOG("Given input was not a valid number!");
+            option = -1;
+            std::cin.clear();
+            std::cin.ignore(256, '\n');
+            continue;
+        }
+
+        if (option < 0 || option > worldNames.size() + 2)
+        {
+            LOG("{0} is not a valid option!", option);
             option = -1;
         }
         else if (option != 0)
         {
-            chosenWorlds[option - 1] = !chosenWorlds[option - 1];
-            numLayers += chosenWorlds[option - 1] ? 1 : -1;
+            if (option == worldNames.size() + 1)
+            {
+                for (size_t i = 0; i < chosenWorlds.size(); ++i)
+                {
+                    chosenWorlds[i] = true;
+                }
+            }
+            else if (option == worldNames.size() + 2)
+            {
+                for (size_t i = 0; i < chosenWorlds.size(); ++i)
+                {
+                    chosenWorlds[i] = false;
+                }
+            }
+            else
+            {
+                chosenWorlds[option - 1] = !chosenWorlds[option - 1];
+                numLayers += chosenWorlds[option - 1] ? 1 : -1;
+            }
         }
         if (numLayers == 0)
         {
